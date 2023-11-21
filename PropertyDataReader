@@ -1,0 +1,77 @@
+   public class PropertyDataReader
+    {
+        /// <summary>
+        /// Current type of this class for Logging
+        /// </summary>
+        private readonly Type _classInstance;
+
+        public PropertyDataReader()
+        {
+            _classInstance = GetType();
+        }
+
+        public object PopulateEntityFromDataReader(object objectClass, IDataReader data)
+        {
+            var method = MethodBase.GetCurrentMethod().Name;            
+            var objectType = objectClass.GetType();
+
+            var obj = Convert.ChangeType(objectClass, objectType);
+
+            try
+            {
+                var arrayClassProperties = objectType.GetProperties();
+
+                foreach (var property in arrayClassProperties)
+                {
+                    if (!property.CanWrite) continue;
+                    var valueObject = PopulateEntityProperty(property.Name, data);
+
+                    var nullableType = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
+
+                    var safeValue = (valueObject == null) ? null : Convert.ChangeType(valueObject, nullableType);
+
+                    obj.GetType().GetProperty(property.Name).SetValue(obj, safeValue, null);
+                }
+            }
+            catch (Exception ex)
+            {
+                ErrorHandler.AddErrorRecord("Error reflecting object properties", ex);
+                throw ex;
+            }
+
+            return obj;
+        }
+
+        private object PopulateEntityProperty(string columnName, IDataReader reader)
+        {
+           var result = new object();
+            try
+            {
+                if (reader == null) return result;
+
+                //check the property exists as a column in the DataReader
+                bool columnExists = (reader.GetSchemaTable().Select("ColumnName = '"+ columnName+"'").Count() == 1);                
+
+                if (columnExists && 
+                    reader.IsDBNull(reader.GetOrdinal(columnName)) == false)
+                {
+                    var columnIndex = reader.GetOrdinal(columnName);
+
+                    if (reader.IsDBNull(columnIndex)) return result;
+
+                    result = Convert.ChangeType(reader.GetValue(columnIndex), reader.GetValue(columnIndex).GetType());
+                }
+                else
+                {
+                    result = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                ErrorHandler.AddErrorRecord($"Error populating object properties from columnName:{columnName}", ex);
+                throw ex;
+            }
+            return result;
+        }
+    }
+}
